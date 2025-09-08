@@ -18,6 +18,7 @@ def insert_batch_to_postgres(batch_df):
         return
 
     conn = get_connection()
+    print(conn)
     cursor = conn.cursor()
 
     # Ensure only known columns

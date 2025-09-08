@@ -28,9 +28,8 @@ def get_connection():
             port=DB_PORT
         )
         logger.info("Successfully connected to the database.")
+        print(conn)
         cursor = conn.cursor()
-        sql_command = """ALTER TABLE abn ALTER COLUMN Gst SET DATA TYPE TIMESTAMP;"""
-        cursor.execute(sql_command)
         AbnCreateQuery = """
         CREATE TABLE IF NOT EXISTS abn (
             id SERIAL PRIMARY KEY,
