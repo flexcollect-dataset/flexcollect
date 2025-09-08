@@ -67,6 +67,8 @@ def lambda_handler(event, context):
     ABRAuthGuid = "250e9f55-f46e-4104-b0df-774fa28cff97"
     GenAiAPI = "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVrNFA"
 
+    client = genai.Client(api_key = GenAiAPI)
+    
     class ABNDetails(BaseModel):
         Contact: str
         Website: str
