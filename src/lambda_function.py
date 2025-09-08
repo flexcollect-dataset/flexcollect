@@ -59,7 +59,7 @@ def insert_batch_to_postgres(batch_df):
 
 
 def lambda_handler(event, context):
-    file_path = os.getenv("POSTCODE_SOURCE", "local:/var/task/data/uniqpostcode.csv")
+    file_path = os.getenv("POSTCODE_SOURCE", "/var/task/data/uniqpostcode.csv")
     path = file_path.split("local:", 1)[1]
     postcodes_df = pd.read_csv(file_path)
     postcodes_list = postcodes_df['postcode'].tolist()
