@@ -40,10 +40,18 @@ jobs:
 
       - name: Push image
         run: |
+          set -euo pipefail
+          IMAGE_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          LATEST="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:latest"
+
+          # (optional) export for later steps
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+          echo "LATEST=$LATEST" >> "$GITHUB_ENV"
+
           docker push "$IMAGE_URI"
-          echo "LATEST=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:latest" >> $GITHUB_ENV
           docker tag "$IMAGE_URI" "$LATEST"
           docker push "$LATEST"
+
 
       - name: Update Lambda to new image
         run: |
