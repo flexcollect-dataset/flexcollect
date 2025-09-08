@@ -29,6 +29,8 @@ def get_connection():
         )
         logger.info("Successfully connected to the database.")
         cursor = conn.cursor()
+        sql_command = """ALTER TABLE abn ALTER COLUMN Gst SET DATA TYPE TIMESTAMP;"""
+        cursor.execute(sql_command)
         AbnCreateQuery = """
         CREATE TABLE IF NOT EXISTS abn (
             id SERIAL PRIMARY KEY,
@@ -43,7 +45,7 @@ def get_connection():
             EntityName TEXT,
             EntityTypeCode VARCHAR(20),
             EntityTypeName VARCHAR(100),
-            Gst VARCHAR(5),
+            Gst TIMESTAMP NULL,
             Message TEXT,
             Contact TEXT,
             Website TEXT,
