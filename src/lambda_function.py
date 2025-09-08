@@ -41,7 +41,7 @@ def insert_batch_to_postgres(batch_df):
     values = [tuple(x) for x in batch_df.to_numpy()]
 
     insert_query = """
-        INSERT INTO business_data
+        INSERT INTO abn
         (Abn, AbnStatus, AbnStatusEffectiveFrom, Acn, AddressDate, AddressPostcode,
          AddressState, BusinessName, EntityName, EntityTypeCode, EntityTypeName, Gst,
          Message, Contact, Website, Address, Email, SocialLink, Review, Industry, Documents)
@@ -59,8 +59,8 @@ def insert_batch_to_postgres(batch_df):
 
 
 def lambda_handler(event, context):
-    file_path = os.getenv("POSTCODE_SOURCE", "/var/task/data/uniqpostcode.csv")
-    postcodes_df = pd.read_csv(file_path)
+
+    postcodes_df = pd.read_csv('data/AustralianPostcodesUnique.csv')
     postcodes_list = postcodes_df['postcode'].tolist()
 
     ABRAuthGuid = "250e9f55-f46e-4104-b0df-774fa28cff97"
