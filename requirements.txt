@@ -1,0 +1,7 @@
+numpy
+pandas
+requests
+boto3
+psycopg2
+pydantic
+google-genai

@@ -1,0 +1,52 @@
+name: Build & Deploy Lambda (Container)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # for OIDC
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  LAMBDA_FUNCTION_NAME: ${{ vars.LAMBDA_FUNCTION_NAME }}
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/GitHubDeployRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build image
+        run: |
+          IMAGE_TAG=${GITHUB_SHA}
+          IMAGE_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${IMAGE_TAG}
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+          docker build --platform linux/amd64 -t "$IMAGE_URI" .
+
+      - name: Push image
+        run: |
+          docker push "$IMAGE_URI"
+          echo "LATEST=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:latest" >> $GITHUB_ENV
+          docker tag "$IMAGE_URI" "$LATEST"
+          docker push "$LATEST"
+
+      - name: Update Lambda to new image
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION_NAME" \
+            --image-uri "$IMAGE_URI"
