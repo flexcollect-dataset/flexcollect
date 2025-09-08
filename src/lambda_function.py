@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-from db_connection import get_connection
+from .db_connection import get_connection
 
 # --- DB insert function ---
 def insert_batch_to_postgres(batch_df):

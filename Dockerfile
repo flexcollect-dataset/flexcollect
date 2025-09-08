@@ -12,4 +12,4 @@ COPY src/ ./src/
 COPY data/ ./data/
 
 # Adjust to your actual handler module.path
-CMD ["src/lambda_function.lambda_handler"]
+CMD ["src.lambda_function.lambda_handler"]
