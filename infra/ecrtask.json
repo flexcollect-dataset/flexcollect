@@ -14,6 +14,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
+          "awslogs-create-group": "true",  
           "awslogs-group": "/ecs/flexcollect",
           "awslogs-region": "ap-southeast-2",
           "awslogs-stream-prefix": "ecs"
