@@ -3,11 +3,6 @@ import os
 
 ecs = boto3.client("ecs")
 
-CLUSTER = os.getenv("ECS_CLUSTER", "flexcollect-cluster")
-TASK_FAMILY = os.getenv("ECS_TASK_FAMILY", "flexcollect-task")
-SUBNETS = os.getenv("ECS_SUBNETS", "subnet-0e75e6788e3ada572,subnet-0b299bc07e425f4dd").split(",")
-SECURITY_GROUPS = os.getenv("ECS_SECURITY_GROUPS", "sg-0ea71df72778eab13")
-
 def handler(event, context):
     """
     Tiny dispatcher: starts a one-off Fargate task that runs your long job.
@@ -23,13 +18,13 @@ def handler(event, context):
         }]
 
     resp = ecs.run_task(
-        cluster=CLUSTER,
-        taskDefinition=TASK_FAMILY,  # family only -> latest ACTIVE revision
+        cluster="flexcollect-cluster",
+        taskDefinition="flexcollect-task",  # family only -> latest ACTIVE revision
         launchType="FARGATE",
         networkConfiguration={
             "awsvpcConfiguration": {
-                "subnets": SUBNETS,
-                "securityGroups": SECURITY_GROUPS,
+                "subnets": "subnet-0e75e6788e3ada572,subnet-0b299bc07e425f4dd",
+                "securityGroups": "sg-0ea71df72778eab13",
                 "assignPublicIp": "ENABLED"
             }
         },
