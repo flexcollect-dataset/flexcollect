@@ -73,13 +73,20 @@ jobs:
       # >>> NEW: Register the rendered task definition as a new revision
       - name: Register task definition (ECS)
         id: register
-        uses: aws-actions/amazon-ecs-register-task-definition@v1
-        with:
-          task-definition: ${{ steps.render.outputs.task-definition }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The render action outputs a path to the rendered file
+          RENDERED="${{ steps.render.outputs.task-definition }}"
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json "file://${RENDERED}" \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "TASK_DEF_ARN=${ARN}" >> $GITHUB_ENV
+          echo "Registered: ${ARN}"
 
-      # (Optional) print the new revision ARN
+      # (Optional) show the ARN
       - name: Output task def revision
-        run: echo "${{ steps.register.outputs.task-definition-arn }}"
+        run: echo "${{ env.TASK_DEF_ARN }}"
 
       # Keep this while you still run the container as a Lambda
       - name: Update Lambda to new image
