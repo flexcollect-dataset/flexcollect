@@ -11,15 +11,6 @@
       "name": "flexcollect",
       "image": "IMAGE_URI_TO_REPLACE",
       "essential": true,
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-create-group": "true",  
-          "awslogs-group": "/ecs/flexcollect",
-          "awslogs-region": "ap-southeast-2",
-          "awslogs-stream-prefix": "ecs"
-        }
-      },
       "command": ["python", "-m", "src.lambda_function_runner"]
     }
   ]
