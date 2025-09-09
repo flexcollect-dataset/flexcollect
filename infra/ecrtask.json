@@ -1,0 +1,25 @@
+{
+  "family": "flexcollect-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::851697623065:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::851697623065:role/flexcollectTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "flexcollect",
+      "image": "IMAGE_URI_TO_REPLACE",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flexcollect",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "command": ["python", "-m", "src.lambda_function_runner"]
+    }
+  ]
+}
