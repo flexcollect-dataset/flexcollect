@@ -79,9 +79,9 @@ ABR_AUTH_GUID = os.getenv("ABR_AUTH_GUID", "250e9f55-f46e-4104-b0df-774fa28cff97
 GENAI_API_KEY = os.getenv("GENAI_API_KEY", "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVrNFA")
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "200"))
-GENAI_BATCH_SIZE = int(os.getenv("GENAI_BATCH_SIZE", "50"))
-ABN_DETAILS_CONCURRENCY = int(os.getenv("ABN_DETAILS_CONCURRENCY", "5"))
-REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10"))
+GENAI_BATCH_SIZE = int(os.getenv("GENAI_BATCH_SIZE", "10"))
+ABN_DETAILS_CONCURRENCY = int(os.getenv("ABN_DETAILS_CONCURRENCY", "3"))
+REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "30"))
 BATCH_PAUSE_SECONDS = float(os.getenv("BATCH_PAUSE_SECONDS", "0"))
 GST_FILTER = os.getenv("GST_FILTER", "")  # "y", "n", or empty for both
 MAX_POSTCODES = int(os.getenv("MAX_POSTCODES", "0"))
@@ -165,8 +165,14 @@ def _fetch_abn_details(abn: str) -> Dict[str, Any]:
     params = {"abn": abn_clean, "callback": "callback", "guid": ABR_AUTH_GUID}
     resp = HTTP_SESSION.get(url, params=params, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
-    data = resp.text.replace("callback(", "").rstrip(")")
-    payload = json.loads(data)
+
+    # Robust JSONP parsing: strip callback wrapper and trailing semicolon
+    text = resp.text.strip()
+    if text.endswith(";"):
+        text = text[:-1]
+    if text.startswith("callback(") and text.endswith(")"):
+        text = text[len("callback("):-1]
+    payload = json.loads(text)
     return payload
 
 
@@ -203,7 +209,7 @@ def lambda_handler(event, context):
                         try:
                             details = _fetch_abn_details(a)
                             return a, details
-                        except requests.RequestException as e:
+                        except Exception as e:
                             logger.warning(f"Error fetching ABN {a}: {e}")
                             return a, None
 
@@ -266,23 +272,35 @@ def lambda_handler(event, context):
 
                     acn_genai_results: List[ACNDocumentsDetails] = []
                     if GENAI_CLIENT and acn_genai_prompts:
-                        for j in range(0, len(acn_genai_prompts), GENAI_BATCH_SIZE):
-                            batch_acn_prompts = acn_genai_prompts[j:j + GENAI_BATCH_SIZE]
-                            try:
-                                dresponse = GENAI_CLIENT.models.generate_content(
-                                    model="gemini-2.5-flash",
-                                    contents=batch_acn_prompts,
-                                    config={
-                                        "response_mime_type": "application/json",
-                                        "response_schema": list[ACNDocumentsDetails],
-                                    },
-                                )
-                                acn_genai_results.extend(dresponse.parsed)
-                            except Exception as e:
-                                logger.warning(f"Error in Generative AI batch call (ACN Docs): {e}")
-                                acn_genai_results.extend([
-                                    ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in batch_acn_prompts
-                                ])
+                        # Call per-prompt with retries to avoid JSON truncation/format errors
+                        for single_prompt in acn_genai_prompts:
+                            attempt = 0
+                            max_attempts = 6
+                            delay = 1.0
+                            while True:
+                                try:
+                                    dresponse = GENAI_CLIENT.models.generate_content(
+                                        model="gemini-2.5-flash",
+                                        contents=[single_prompt],
+                                        config={
+                                            "response_mime_type": "application/json",
+                                            "response_schema": list[ACNDocumentsDetails],
+                                        },
+                                    )
+                                    parsed_items = getattr(dresponse, "parsed", []) or []
+                                    if isinstance(parsed_items, list) and parsed_items:
+                                        acn_genai_results.append(parsed_items[0])
+                                    else:
+                                        acn_genai_results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
+                                    break
+                                except Exception as e:
+                                    attempt += 1
+                                    if attempt >= max_attempts:
+                                        logger.warning(f"Error in Generative AI batch call (ACN Docs): {e}")
+                                        acn_genai_results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
+                                        break
+                                    time.sleep(min(60.0, delay))
+                                    delay *= 2.0
                     else:
                         acn_genai_results = [ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in acn_genai_prompts]
 
