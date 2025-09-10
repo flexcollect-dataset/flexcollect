@@ -75,8 +75,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # --- Configuration via environment variables ---
-ABR_AUTH_GUID = os.getenv("ABR_AUTH_GUID", "")
-GENAI_API_KEY = os.getenv("GENAI_API_KEY", "")
+ABR_AUTH_GUID = os.getenv("ABR_AUTH_GUID", "250e9f55-f46e-4104-b0df-774fa28cff97")
+GENAI_API_KEY = os.getenv("GENAI_API_KEY", "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVrNFA")
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "200"))
 GENAI_BATCH_SIZE = int(os.getenv("GENAI_BATCH_SIZE", "50"))

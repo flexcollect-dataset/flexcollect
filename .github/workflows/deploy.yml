@@ -22,19 +22,7 @@ env:
   # NEW: role names and optional app policies to attach to the task role
   EXECUTION_ROLE_NAME: ecsTaskExecutionRole
   TASK_ROLE_NAME: flexcollectTaskRole
-
-  ABR_AUTH_GUID: "250e9f55-f46e-4104-b0df-774fa28cff97"
-  GENAI_API_KEY: "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVrNFA"
-  BATCH_SIZE: 200
-  GENAI_BATCH_SIZE: 50
-  ABN_DETAILS_CONCURRENCY: 5
-  REQUEST_TIMEOUT: 10
-  BATCH_PAUSE_SECONDS: 0
-  GST_FILTER: ""
-  MAX_POSTCODES: 0
-  POSTCODE_START_INDEX: 0
-
-
+  
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
