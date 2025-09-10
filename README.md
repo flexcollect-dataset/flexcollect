@@ -4,7 +4,7 @@ Repo for collecting data and add it to dataset
 
 ## Run as ECS task (no Lambda)
 
-This project now runs directly as an ECS Fargate task. The container executes `src.lambda_function_runner` which invokes your main logic in `src.lambda_function.lambda_handler` once.
+This project now runs directly as an ECS Fargate task. The container executes `src.lambda_function` (which calls `lambda_handler` via its `main()` function) once.
 
 ### Steps
 
@@ -17,7 +17,7 @@ This project now runs directly as an ECS Fargate task. The container executes `s
      ```
 2. Update `infra/ecrtask.json`:
    - Set `containerDefinitions[0].image` to your `IMAGE_URI`.
-   - Keep `entryPoint` as `["python","-u","-m","src.lambda_function_runner"]`.
+   - Keep `entryPoint` as `["python","-u","-m","src.lambda_function"]`.
 3. Register the task definition:
    - ```bash
      aws ecs register-task-definition --cli-input-json file://infra/ecrtask.json | cat

@@ -17,5 +17,5 @@ RUN pip install -r /app/requirements.txt
 COPY src/ /app/src/
 COPY data/ /app/data/
 
-# Default command runs the ECS task runner directly
-CMD ["python","-u","-m","src.lambda_function_runner"]
+# Default command runs the main logic directly
+CMD ["python","-u","-m","src.lambda_function"]
