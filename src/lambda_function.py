@@ -220,3 +220,19 @@ def lambda_handler(event, context):
 
             except requests.exceptions.RequestException as e:
                 print(f"Error fetching ABNs for postcode {postcode} with GST {GstParam}: {e}")
+
+def _event_from_env():
+    payload = os.getenv("FC_EVENT_JSON")
+    if not payload:
+        return {}
+    try:
+        return json.loads(payload)
+    except Exception:
+        return {}
+
+def main():
+    event = _event_from_env()
+    lambda_handler(event, None)
+
+if __name__ == "__main__":
+    main()

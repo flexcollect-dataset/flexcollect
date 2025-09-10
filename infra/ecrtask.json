@@ -11,7 +11,7 @@
       "name": "flexcollect",
       "image": "IMAGE_URI_TO_REPLACE",
       "essential": true,
-      "entryPoint": ["python","-u","-m","src.lambda_function_runner"],
+      "entryPoint": ["python","-u","-m","src.lambda_function"],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
