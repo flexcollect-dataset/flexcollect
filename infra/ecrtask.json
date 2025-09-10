@@ -12,6 +12,9 @@
       "image": "IMAGE_URI_TO_REPLACE",
       "essential": true,
       "entryPoint": ["python","-u","-m","src.lambda_function"],
+      "environment": [
+        { "name": "ABR_AUTH_GUID", "value": "REPLACE_WITH_YOUR_GUID" }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
