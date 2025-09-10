@@ -6,6 +6,7 @@ import logging
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+conn = None
 
 # Use environment variables for sensitive data
 # It's a best practice to store credentials in AWS Secrets Manager or Parameter Store
@@ -16,19 +17,21 @@ DB_PASS = "Luffy123&&Lucky"
 DB_PORT = "5432"
 
 def get_connection():
-    conn = None
+    global conn
     try:
         # Establish a connection to the database
-        logger.info("Attempting to connect to the database...")
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS,
-            port=DB_PORT
-        )
-        logger.info("Successfully connected to the database.")
-        print(conn)
+        if conn is None or conn.closed: 
+            logger.info("Attempting to connect to the database...")
+            conn = psycopg2.connect(
+                host=DB_HOST,
+                database=DB_NAME,
+                user=DB_USER,
+                password=DB_PASS,
+                port=DB_PORT
+            )
+            logger.info("Successfully connected to the database.")
+            conn.autocommit = False 
+              
         cursor = conn.cursor()
         AbnCreateQuery = """
         CREATE TABLE IF NOT EXISTS abn (

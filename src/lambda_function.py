@@ -84,8 +84,8 @@ def lambda_handler(event, context):
 
 
     GstRegistrationValues = ['y', 'n']
-    batch_size = 5
-    genai_batch_size = 5
+    batch_size = 1000
+    genai_batch_size = 500
 
     # --- MAIN LOOP ---
     for GstParam in GstRegistrationValues:
