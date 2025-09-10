@@ -1,15 +1,21 @@
-FROM public.ecr.aws/lambda/python:3.11
+FROM python:3.11-slim
 
 # Speed up installs and avoid building from source whenever possible
-ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ONLY_BINARY=:all:
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ONLY_BINARY=:all: \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
 
 RUN pip install --upgrade pip setuptools wheel
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+COPY requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
 
-COPY src/ ./src/
-COPY data/ ./data/
+COPY src/ /app/src/
+COPY data/ /app/data/
 
-# Adjust to your actual handler module.path
-CMD ["src.dispatcher_lambda.handler"]
+# Default command runs the ECS task runner directly
+CMD ["python","-u","-m","src.lambda_function_runner"]
