@@ -15,6 +15,7 @@ from urllib3.util.retry import Retry
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential_jitter, retry_if_exception_type
 
 # --- DB connection (inlined) ---
 conn = None
@@ -238,6 +239,45 @@ def _fetch_abn_details(abn: str) -> Dict[str, Any]:
     return payload
 
 
+# --- GenAI retry helpers ---
+class TransientError(Exception):
+    pass
+
+
+def _is_transient_error_message(message: str) -> bool:
+    lower_msg = (message or "").lower()
+    return any(term in lower_msg for term in ["503", "unavailable", "overloaded", "timeout", "temporarily"])
+
+
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(8),
+    wait=wait_exponential_jitter(initial=1, max=60),
+    retry=retry_if_exception_type((TransientError, requests.Timeout, requests.ConnectionError, requests.HTTPError)),
+)
+def call_genai_with_retry(contents: list[str], response_schema) -> list:
+    if not GENAI_CLIENT:
+        raise RuntimeError("GENAI client not configured")
+    try:
+        response = GENAI_CLIENT.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": response_schema,
+            },
+        )
+        parsed = getattr(response, "parsed", None)
+        if parsed is None:
+            raise TransientError("Empty parsed response from GenAI")
+        return parsed
+    except Exception as e:
+        # Map known transient conditions to TransientError for retry
+        if _is_transient_error_message(str(e)):
+            raise TransientError(str(e))
+        raise
+
+
 def lambda_handler(event, context):
     if not ABR_AUTH_GUID:
         logger.error("ABR_AUTH_GUID is not configured. Set it via environment variable.")
@@ -313,15 +353,8 @@ def lambda_handler(event, context):
                         for j in range(0, len(genai_prompts), GENAI_BATCH_SIZE):
                             batch_prompts = genai_prompts[j:j + GENAI_BATCH_SIZE]
                             try:
-                                response = GENAI_CLIENT.models.generate_content(
-                                    model="gemini-2.5-flash",
-                                    contents=batch_prompts,
-                                    config={
-                                        "response_mime_type": "application/json",
-                                        "response_schema": list[ABNDetails],
-                                    },
-                                )
-                                genai_results.extend(response.parsed)
+                                parsed_list = call_genai_with_retry(batch_prompts, list[ABNDetails])
+                                genai_results.extend(parsed_list)
                             except Exception as e:
                                 logger.warning(f"Error in Generative AI batch call (ABN): {e}")
                                 genai_results.extend([
@@ -334,35 +367,17 @@ def lambda_handler(event, context):
 
                     acn_genai_results: List[ACNDocumentsDetails] = []
                     if GENAI_CLIENT and acn_genai_prompts:
-                        # Call per-prompt with retries to avoid JSON truncation/format errors
+                        # Call per-prompt using tenacity retry to handle transient errors and truncation
                         for single_prompt in acn_genai_prompts:
-                            attempt = 0
-                            max_attempts = 6
-                            delay = 1.0
-                            while True:
-                                try:
-                                    dresponse = GENAI_CLIENT.models.generate_content(
-                                        model="gemini-2.5-flash",
-                                        contents=[single_prompt],
-                                        config={
-                                            "response_mime_type": "application/json",
-                                            "response_schema": list[ACNDocumentsDetails],
-                                        },
-                                    )
-                                    parsed_items = getattr(dresponse, "parsed", []) or []
-                                    if isinstance(parsed_items, list) and parsed_items:
-                                        acn_genai_results.append(parsed_items[0])
-                                    else:
-                                        acn_genai_results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
-                                    break
-                                except Exception as e:
-                                    attempt += 1
-                                    if attempt >= max_attempts:
-                                        logger.warning(f"Error in Generative AI batch call (ACN Docs): {e}")
-                                        acn_genai_results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
-                                        break
-                                    time.sleep(min(60.0, delay))
-                                    delay *= 2.0
+                            try:
+                                parsed_items = call_genai_with_retry([single_prompt], list[ACNDocumentsDetails])
+                                if isinstance(parsed_items, list) and parsed_items:
+                                    acn_genai_results.append(parsed_items[0])
+                                else:
+                                    acn_genai_results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
+                            except Exception as e:
+                                logger.warning(f"Error in Generative AI batch call (ACN Docs): {e}")
+                                acn_genai_results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
                     else:
                         acn_genai_results = [ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in acn_genai_prompts]
 
