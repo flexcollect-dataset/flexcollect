@@ -15,7 +15,69 @@ from urllib3.util.retry import Retry
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-from .db_connection import get_connection
+
+# --- DB connection (inlined) ---
+conn = None
+
+# Use environment variables with safe defaults
+DB_HOST = os.getenv("DB_HOST", "flexdataset.cluster-cpoeqq6cwu00.ap-southeast-2.rds.amazonaws.com")
+DB_NAME = os.getenv("DB_NAME", "FlexDataseterMaster")
+DB_USER = os.getenv("DB_USER", "FlexUser")
+DB_PASS = os.getenv("DB_PASS", "Luffy123&&Lucky")
+DB_PORT = os.getenv("DB_PORT", "5432")
+
+def get_connection():
+    global conn
+    log = logging.getLogger(__name__)
+    try:
+        if conn is None or getattr(conn, "closed", True):
+            log.info("Attempting to connect to the database...")
+            conn = psycopg2.connect(
+                host=DB_HOST,
+                database=DB_NAME,
+                user=DB_USER,
+                password=DB_PASS,
+                port=DB_PORT
+            )
+            log.info("Successfully connected to the database.")
+            conn.autocommit = False
+
+        cursor = conn.cursor()
+        AbnCreateQuery = """
+        CREATE TABLE IF NOT EXISTS abn (
+            id SERIAL PRIMARY KEY,
+            Abn VARCHAR(20),
+            AbnStatus VARCHAR(50),
+            AbnStatusEffectiveFrom TIMESTAMP NULL,
+            Acn VARCHAR(20),
+            AddressDate TIMESTAMP NULL,
+            AddressPostcode VARCHAR(10),
+            AddressState VARCHAR(10),
+            BusinessName TEXT,
+            EntityName TEXT,
+            EntityTypeCode VARCHAR(20),
+            EntityTypeName VARCHAR(100),
+            Gst TIMESTAMP NULL,
+            Message TEXT,
+            Contact TEXT,
+            Website TEXT,
+            Address TEXT,
+            Email TEXT,
+            SocialLink TEXT,
+            Review TEXT,
+            Industry TEXT,
+            Documents TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        """
+        cursor.execute(AbnCreateQuery)
+        return conn
+    except Exception as e:
+        log.error(f"Error connecting to or querying the database: {e}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f'Error: {str(e)}')
+        }
 
 # --- DB insert function ---
 def insert_batch_to_postgres(batch_df: pd.DataFrame) -> None:
