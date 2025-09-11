@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import os
 import logging
@@ -127,6 +128,92 @@ class ACNDocumentsDetails(BaseModel):
     noticetype: str
 
 
+# --- Helpers for robust ACN Docs parsing ---
+def _find_json_array_span(text: str) -> tuple[int, int] | None:
+    start_index = text.find("[")
+    if start_index == -1:
+        return None
+    depth = 0
+    for index in range(start_index, len(text)):
+        char = text[index]
+        if char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return start_index, index + 1
+    return None
+
+
+def _extract_json_array(text: str) -> list:
+    if not text:
+        return []
+    span = _find_json_array_span(text)
+    if not span:
+        # Try to quickly sanitize backticks or code fences
+        sanitized = text.strip().strip("`")
+        try:
+            parsed = json.loads(sanitized)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    start_index, end_index = span
+    snippet = text[start_index:end_index]
+    try:
+        parsed = json.loads(snippet)
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+
+def _coerce_acn_docs(items: list) -> list[ACNDocumentsDetails]:
+    coerced: list[ACNDocumentsDetails] = []
+    for raw in items[:3]:
+        if not isinstance(raw, dict):
+            continue
+        document_id = str(raw.get("documentid", ""))[:80]
+        publication_date = str(raw.get("dateofpublication", ""))[:80]
+        notice_type = str(raw.get("noticetype", ""))[:80]
+        coerced.append(
+            ACNDocumentsDetails(
+                documentid=document_id,
+                dateofpublication=publication_date,
+                noticetype=notice_type,
+            )
+        )
+    return coerced
+
+
+def _generate_acn_docs_with_fallback(batch_prompts: list[str]) -> list[ACNDocumentsDetails]:
+    results: list[ACNDocumentsDetails] = []
+    for prompt in batch_prompts:
+        try:
+            resp = GENAI_CLIENT.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[prompt],
+                config={
+                    "response_mime_type": "text/plain",
+                    "temperature": 0.2,
+                    "max_output_tokens": 1024,
+                },
+            )
+            raw_text = getattr(resp, "text", None)
+            if not raw_text and hasattr(resp, "candidates") and resp.candidates:
+                # Fallback extraction for SDK variations
+                parts = getattr(resp.candidates[0], "content", None)
+                raw_text = getattr(parts, "parts", [None])[0]
+                raw_text = getattr(raw_text, "text", None)
+            items = _extract_json_array(raw_text or "")
+            coerced = _coerce_acn_docs(items)
+            if coerced:
+                results.append(coerced[0])
+            else:
+                results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
+        except Exception:
+            results.append(ACNDocumentsDetails(documentid="", dateofpublication="", noticetype=""))
+    return results
+
+
 # --- Load postcodes once (if available) ---
 def _load_postcodes() -> List[str]:
     try:
@@ -235,7 +322,12 @@ def lambda_handler(event, context):
                             )
                             genai_indices.append(idx)
                             acn_genai_prompts.append(
-                                "Also using this site https://publishednotices.asic.gov.au/browsesearch-notices fetch all the notices related to ACN " + acn_value
+                                (
+                                    "Using only the site https://publishednotices.asic.gov.au/browsesearch-notices, "
+                                    f"return a JSON array with at most 3 objects listing notices for ACN {acn_value}. "
+                                    "Each object must have exactly these keys: documentid, dateofpublication, noticetype. "
+                                    "Respond with JSON only, no prose or markdown. Keep values concise (<=80 characters)."
+                                )
                             )
                             acn_genai_indices.append(idx)
 
@@ -275,14 +367,16 @@ def lambda_handler(event, context):
                                     config={
                                         "response_mime_type": "application/json",
                                         "response_schema": list[ACNDocumentsDetails],
+                                        "temperature": 0.2,
+                                        "max_output_tokens": 1024,
                                     },
                                 )
                                 acn_genai_results.extend(dresponse.parsed)
                             except Exception as e:
                                 logger.warning(f"Error in Generative AI batch call (ACN Docs): {e}")
-                                acn_genai_results.extend([
-                                    ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in batch_acn_prompts
-                                ])
+                                # Per-prompt fallback parsing
+                                fallback_results = _generate_acn_docs_with_fallback(batch_acn_prompts)
+                                acn_genai_results.extend(fallback_results)
                     else:
                         acn_genai_results = [ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in acn_genai_prompts]
 
