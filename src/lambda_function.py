@@ -15,7 +15,7 @@ from urllib3.util.retry import Retry
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-from .db_connection import get_connection
+from .db_connection import get_connection, get_last_processed_postcode, set_last_processed_postcode
 
 # --- DB insert function ---
 def insert_batch_to_postgres(batch_df: pd.DataFrame) -> None:
@@ -59,6 +59,7 @@ def insert_batch_to_postgres(batch_df: pd.DataFrame) -> None:
          AddressState, BusinessName, EntityName, EntityTypeCode, EntityTypeName, Gst,
          Message, Contact, Website, Address, Email, SocialLink, Review, Industry, Documents)
         VALUES %s
+        ON CONFLICT (Abn) DO NOTHING
     """
 
     psycopg2.extras.execute_values(
@@ -86,6 +87,7 @@ BATCH_PAUSE_SECONDS = float(os.getenv("BATCH_PAUSE_SECONDS", "0"))
 GST_FILTER = os.getenv("GST_FILTER", "")  # "y", "n", or empty for both
 MAX_POSTCODES = int(os.getenv("MAX_POSTCODES", "0"))
 POSTCODE_START_INDEX = int(os.getenv("POSTCODE_START_INDEX", "0"))
+RESUME_FROM_DB = os.getenv("RESUME_FROM_DB", "true").lower() in ("1", "true", "yes", "y")
 
 # --- HTTP session with retries ---
 def _build_session() -> requests.Session:
@@ -185,7 +187,19 @@ def lambda_handler(event, context):
 
     # --- MAIN LOOP ---
     for gst_param in gst_values:
-        for postcode in postcodes_list:
+        # Apply resume per GST flag if enabled
+        effective_postcodes = postcodes_list
+        if RESUME_FROM_DB:
+            last_pc = get_last_processed_postcode(gst_param)
+            if last_pc and last_pc in effective_postcodes:
+                try:
+                    start_idx = effective_postcodes.index(last_pc) + 1
+                    effective_postcodes = effective_postcodes[start_idx:]
+                    logger.info(f"Resuming from postcode after {last_pc} for GST {gst_param}")
+                except ValueError:
+                    pass
+
+        for postcode in effective_postcodes:
             try:
                 abns = _search_abns(postcode, gst_param)
                 logger.info(f"Found {len(abns)} ABNs for postcode {postcode} with GST {gst_param}")
@@ -326,6 +340,13 @@ def lambda_handler(event, context):
 
                     if BATCH_PAUSE_SECONDS > 0:
                         time.sleep(BATCH_PAUSE_SECONDS)
+
+                # Mark postcode as processed for this GST flag
+                if RESUME_FROM_DB:
+                    try:
+                        set_last_processed_postcode(gst_param, postcode)
+                    except Exception as e:
+                        logger.warning(f"Failed to update progress for GST {gst_param}, postcode {postcode}: {e}")
 
             except requests.exceptions.RequestException as e:
                 logger.warning(f"Error fetching ABNs for postcode {postcode} with GST {gst_param}: {e}")

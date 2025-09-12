@@ -32,3 +32,21 @@ This project now runs directly as an ECS Fargate task. The container executes `s
      ```
 
 Optional: To pass parameters to the task, set the env var `FC_EVENT_JSON` as a container override when calling `run-task`. The runner will decode it and forward it to your handler.
+
+### Resume and Idempotency
+
+- ABN inserts are idempotent. Table `abn` has a unique index on `Abn` and inserts use `ON CONFLICT (Abn) DO NOTHING`.
+- Postcode progress is persisted in Postgres table `kv_store` with keys `last_postcode_y` and `last_postcode_n` (per GST flag).
+- By default, the task resumes from the next postcode after the last recorded one for each GST flag.
+
+Environment variables:
+
+- `RESUME_FROM_DB` (default: `true`): when true, resume from DB progress; set to `false` to always start from the beginning (or use `POSTCODE_START_INDEX`).
+- `POSTCODE_START_INDEX`: optional zero-based index into the CSV to define a manual starting point.
+- `MAX_POSTCODES`: optional cap on how many postcodes to process this run.
+
+Resetting progress:
+
+```sql
+DELETE FROM kv_store WHERE k IN ('last_postcode_y','last_postcode_n');
+```
