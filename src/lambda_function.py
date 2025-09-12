@@ -260,7 +260,7 @@ def lambda_handler(event, context):
                             batch_prompts = genai_prompts[j:j + GENAI_BATCH_SIZE]
                             try:
                                 response = GENAI_CLIENT.models.generate_content(
-                                    model="gemini-2.5-flash",
+                                    model="gemini-2.0-flash",
                                     contents=batch_prompts,
                                     config={
                                         "response_mime_type": "application/json",
@@ -284,7 +284,7 @@ def lambda_handler(event, context):
                             batch_acn_prompts = acn_genai_prompts[j:j + GENAI_BATCH_SIZE]
                             try:
                                 dresponse = GENAI_CLIENT.models.generate_content(
-                                    model="gemini-2.5-flash",
+                                    model="gemini-2.0-flash",
                                     contents=batch_acn_prompts,
                                     config={
                                         "response_mime_type": "application/json",
