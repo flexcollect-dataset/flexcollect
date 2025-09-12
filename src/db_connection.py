@@ -4,8 +4,7 @@ import psycopg2
 import logging
 
 # Set up logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 conn = None
 
 # Use environment variables for sensitive data
