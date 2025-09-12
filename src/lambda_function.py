@@ -75,6 +75,13 @@ def insert_batch_to_postgres(batch_df: pd.DataFrame) -> None:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Reduce noise from third-party libraries leaking INFO logs (e.g., AFC notice)
+for noisy_logger_name in ("google", "google.genai", "urllib3", "requests", "httpx"):
+    try:
+        logging.getLogger(noisy_logger_name).setLevel(logging.WARNING)
+    except Exception:
+        pass
+
 # --- Configuration via environment variables ---
 ABR_AUTH_GUID = os.getenv("ABR_AUTH_GUID", "250e9f55-f46e-4104-b0df-774fa28cff97")
 GENAI_API_KEY = os.getenv("GENAI_API_KEY", "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVrNFA")
