@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import os
 import logging
@@ -88,6 +89,7 @@ GENAI_API_KEY = os.getenv("GENAI_API_KEY", "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVr
 
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "200"))
 GENAI_BATCH_SIZE = int(os.getenv("GENAI_BATCH_SIZE", "50"))
+GENAI_CONCURRENCY = int(os.getenv("GENAI_CONCURRENCY", "6"))
 ABN_DETAILS_CONCURRENCY = int(os.getenv("ABN_DETAILS_CONCURRENCY", "5"))
 REQUEST_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT", "10"))
 BATCH_PAUSE_SECONDS = float(os.getenv("BATCH_PAUSE_SECONDS", "0"))
@@ -260,50 +262,71 @@ def lambda_handler(event, context):
                             )
                             acn_genai_indices.append(idx)
 
-                    # --- Call Generative AI in batches ---
+                    # --- Call Generative AI per-prompt with bounded concurrency ---
                     genai_results: List[ABNDetails] = []
                     if GENAI_CLIENT and genai_prompts:
-                        for j in range(0, len(genai_prompts), GENAI_BATCH_SIZE):
-                            batch_prompts = genai_prompts[j:j + GENAI_BATCH_SIZE]
+                        def _extract_json(text: str) -> str:
+                            if not text:
+                                return ""
+                            # Greedy capture of JSON object or array
+                            match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+                            return match.group(1) if match else text
+
+                        def _genai_generate_abn(prompt: str) -> ABNDetails:
                             try:
-                                response = GENAI_CLIENT.models.generate_content(
+                                resp = GENAI_CLIENT.models.generate_content(
                                     model="gemini-2.0-flash",
-                                    contents=batch_prompts,
+                                    contents=[prompt],
                                     config={
                                         "response_mime_type": "application/json",
-                                        "response_schema": list[ABNDetails],
+                                        "response_schema": ABNDetails,
                                     },
                                 )
-                                genai_results.extend(response.parsed)
-                            except Exception as e:
-                                logger.warning(f"Error in Generative AI batch call (ABN): {e}")
-                                genai_results.extend([
-                                    ABNDetails(Contact="", Website="", Address="", Email="", SocialLink=[], review="", Industry="")
-                                    for _ in batch_prompts
-                                ])
+                                if getattr(resp, "parsed", None):
+                                    return resp.parsed
+                                # Fallback: try to parse from text payload
+                                text_out = getattr(resp, "text", None) or ""
+                                raw = _extract_json(text_out)
+                                data_obj = json.loads(raw)
+                                return ABNDetails(**data_obj)
+                            except Exception:
+                                # Quiet fallback without noisy warnings
+                                return ABNDetails(Contact="", Website="", Address="", Email="", SocialLink=[], review="", Industry="")
+
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=GENAI_CONCURRENCY) as pool:
+                            genai_results = list(pool.map(_genai_generate_abn, genai_prompts))
                     else:
-                        # Fill with empty results if client not configured
                         genai_results = [ABNDetails(Contact="", Website="", Address="", Email="", SocialLink=[], review="", Industry="") for _ in genai_prompts]
 
                     acn_genai_results: List[ACNDocumentsDetails] = []
                     if GENAI_CLIENT and acn_genai_prompts:
-                        for j in range(0, len(acn_genai_prompts), GENAI_BATCH_SIZE):
-                            batch_acn_prompts = acn_genai_prompts[j:j + GENAI_BATCH_SIZE]
+                        def _extract_json(text: str) -> str:
+                            if not text:
+                                return ""
+                            match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+                            return match.group(1) if match else text
+
+                        def _genai_generate_acn(prompt: str) -> ACNDocumentsDetails:
                             try:
-                                dresponse = GENAI_CLIENT.models.generate_content(
+                                resp = GENAI_CLIENT.models.generate_content(
                                     model="gemini-2.0-flash",
-                                    contents=batch_acn_prompts,
+                                    contents=[prompt],
                                     config={
                                         "response_mime_type": "application/json",
-                                        "response_schema": list[ACNDocumentsDetails],
+                                        "response_schema": ACNDocumentsDetails,
                                     },
                                 )
-                                acn_genai_results.extend(dresponse.parsed)
-                            except Exception as e:
-                                logger.warning(f"Error in Generative AI batch call (ACN Docs): {e}")
-                                acn_genai_results.extend([
-                                    ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in batch_acn_prompts
-                                ])
+                                if getattr(resp, "parsed", None):
+                                    return resp.parsed
+                                text_out = getattr(resp, "text", None) or ""
+                                raw = _extract_json(text_out)
+                                data_obj = json.loads(raw)
+                                return ACNDocumentsDetails(**data_obj)
+                            except Exception:
+                                return ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="")
+
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=GENAI_CONCURRENCY) as pool:
+                            acn_genai_results = list(pool.map(_genai_generate_acn, acn_genai_prompts))
                     else:
                         acn_genai_results = [ACNDocumentsDetails(documentid="", dateofpublication="", noticetype="") for _ in acn_genai_prompts]
 
