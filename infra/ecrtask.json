@@ -1,5 +1,5 @@
 {
-  "family": "flexcollect-task",
+  "family": "flexcollect-task-file",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
@@ -8,27 +8,20 @@
   "taskRoleArn": "arn:aws:iam::851697623065:role/flexcollectTaskRole",
   "containerDefinitions": [
     {
-      "name": "flexcollect",
+      "name": "flexcollect-file",
       "image": "IMAGE_URI_TO_REPLACE",
       "essential": true,
       "environment": [
-        { "name": "ABR_AUTH_GUID", "value": "250e9f55-f46e-4104-b0df-774fa28cff97" },
-        { "name": "GENAI_API_KEY", "value": "AIzaSyD1VmH7wuQVqxld5LeKjF79eRq1gqVrNFA" },
         { "name": "BATCH_SIZE", "value": "200" },
-        { "name": "GENAI_BATCH_SIZE", "value": "50" },
         { "name": "ABN_DETAILS_CONCURRENCY", "value": "5" },
-        { "name": "REQUEST_TIMEOUT", "value": "10" },
-        { "name": "BATCH_PAUSE_SECONDS", "value": "0" },
-        { "name": "GST_FILTER", "value": "" },
-        { "name": "MAX_POSTCODES", "value": "0" },
-        { "name": "POSTCODE_START_INDEX", "value": "0" }
+        { "name": "TAX_CSV_S3_URI", "value": "s3://lambdadependency1/TaxRecords.csv" }
       ],
       "entryPoint": ["python","-u","-m","src.lambda_function"],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
           "awslogs-create-group": "true",  
-          "awslogs-group": "/ecs/flexcollect",
+          "awslogs-group": "/ecs/flexcollect-file",
           "awslogs-region": "ap-southeast-2",
           "awslogs-stream-prefix": "ecs"
         }
